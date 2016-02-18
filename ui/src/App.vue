@@ -17,7 +17,7 @@
         </div>
         <div class="media-body">
             <h4 class="media-heading">
-                <a href="">{{ bar.name }}</a>
+                <a target="_blank" href="http://www.yelp.com/biz/{{ bar.id }}">{{ bar.name }}</a>
                 <button v-bind:class="bar.going ? 'btn pull-right' : 'btn btn-primary pull-right'" 
                         @click.prevent="send(bar.id)"
                         v-show="isAuth">Going: {{ bar.total }}</button>

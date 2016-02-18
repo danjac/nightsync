@@ -1,8 +1,6 @@
 package main
 
 import (
-	//"github.com/justinas/nosurf"
-
 	"crypto/rsa"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/JustinBeckwith/go-yelp/yelp"
@@ -57,9 +56,72 @@ func fatal(err error) {
 }
 
 // keeps track of visits in lieu of real database
-// this isn't going to be threadsafe, but not important here
-var counter = make(map[string]int)
-var visits = make(map[string]map[string]bool)
+type database struct {
+	sync.RWMutex
+	counter map[string]int
+	visits  map[string]map[string]bool
+}
+
+func initDB() database {
+	db := database{}
+	db.counter = make(map[string]int)
+	db.visits = make(map[string]map[string]bool)
+	return db
+}
+
+func (db database) isGoing(barID, userID string) bool {
+	if userID == "" {
+		return false
+	}
+	isGoing := false
+	db.RLock()
+	if visits, ok := db.visits[userID]; ok {
+		isGoing = visits[barID]
+	}
+	db.RUnlock()
+	return isGoing
+}
+
+func (db database) getTotal(barID string) int {
+	var total int
+	db.RLock()
+	total = db.counter[barID]
+	db.RUnlock()
+	return total
+}
+
+func (db database) save(barID string, userID string) int {
+
+	db.Lock()
+	total := 0
+
+	// initialize user visits map
+	if _, ok := db.visits[userID]; !ok {
+		db.visits[userID] = make(map[string]bool)
+	}
+
+	// get current
+	if current, ok := db.counter[barID]; ok {
+		total = current
+	}
+
+	// if user has visited before, decrement by 1, and remove user from visits
+	// otherwise increment by 1
+	if _, ok := db.visits[userID][barID]; ok {
+		total--
+		delete(db.visits[userID], barID)
+	} else {
+		total++
+		db.visits[userID][barID] = true
+	}
+
+	// update counter
+	db.counter[barID] = total
+	db.Unlock()
+	return total
+}
+
+var db = initDB()
 
 // Message is message broadcast to all connections
 type Message struct {
@@ -77,28 +139,16 @@ type Bar struct {
 	Going     bool   `json:"going"`
 }
 
-/*
-const writeWait = 10 * time.Second
-const pongWait = 60 * time.Second
-const pingPeriod = (pongWait * 9) / 10
-const maxMessageSize = 1024 * 1024
-*/
-
 type conn struct {
 	ws     *websocket.Conn
 	userID string
 	send   chan *Message
 }
 
-func (c *conn) writemsg(msg *Message) error {
-	//c.ws.SetWriteDeadline(time.Now().Add(writeWait))
-	fmt.Println("MSG", msg)
-	return websocket.JSON.Send(c.ws, msg)
-}
-
-func (c *conn) write() error {
+func (c *conn) write(wg *sync.WaitGroup) error {
 	defer func() {
 		c.ws.Close()
+		wg.Done()
 	}()
 	//c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 
@@ -108,18 +158,18 @@ func (c *conn) write() error {
 			if !ok {
 				return nil
 			}
-			if err := c.writemsg(msg); err != nil {
+			if err := websocket.JSON.Send(c.ws, msg); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func (c *conn) read() error {
-	fmt.Println("start read loop")
+func (c *conn) read(wg *sync.WaitGroup) error {
 	defer func() {
 		h.unregister <- c
 		c.ws.Close()
+		wg.Done()
 	}()
 
 	//c.ws.SetReadDeadline(time.Now().Add(pongWait))
@@ -131,27 +181,9 @@ func (c *conn) read() error {
 			break
 		}
 		if c.userID != "" {
-			msg := &Message{ID: id, Total: 1}
-			if total, ok := counter[id]; ok {
-				fmt.Println("total", total)
-				// has the user already clicked?
-				if _, ok := visits[c.userID][id]; ok {
-					msg.Total = total - 1
-					delete(visits[c.userID], id)
-				} else {
-					msg.Total = total + 1
-					if _, ok := visits[c.userID]; !ok {
-						visits[c.userID] = make(map[string]bool)
-					}
-					visits[c.userID][id] = true
-				}
-			} else {
-				if _, ok := visits[c.userID]; !ok {
-					visits[c.userID] = make(map[string]bool)
-				}
-				visits[c.userID][id] = true
-			}
-			counter[id] = msg.Total
+
+			total := db.save(id, c.userID)
+			msg := &Message{ID: id, Total: total}
 			h.broadcast <- msg
 		}
 	}
@@ -317,8 +349,8 @@ func main() {
 				biz.ImageURL,
 				biz.Name,
 				biz.SnippetText,
-				counter[biz.ID],
-				visits[userID][biz.ID],
+				db.getTotal(biz.ID),
+				db.isGoing(biz.ID, userID),
 			}
 		}
 		return c.JSON(http.StatusOK, bars)
@@ -330,10 +362,13 @@ func main() {
 		// tbd: pass the user ID to the connection
 		cn := &conn{send: make(chan *Message), ws: ws, userID: getUserID(c)}
 		h.register <- cn
-		go cn.write()
-		// we need to pass in the current user
-		fmt.Println("Auth?", getUserID(c))
-		return cn.read()
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go cn.write(&wg)
+		go cn.read(&wg)
+		wg.Wait()
+		return nil
 	})
 
 	auth := e.Group("/auth/")
@@ -360,7 +395,6 @@ func main() {
 		}
 		expires := time.Now().Add(time.Hour * 24)
 		userID := fmt.Sprintf("%s:%s", creds.Provider, creds.UserID)
-		fmt.Printf("USERID:%q\r\n", userID)
 
 		token := jwt.New(jwt.SigningMethodRS256)
 		token.Claims["userid"] = userID
