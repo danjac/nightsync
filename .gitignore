@@ -1,0 +1,13 @@
+node_modules
+bower_components
+coverage
+dist
+bin
+keys
+pkg
+vendor/src
+*.swp
+*.log
+*.orig
+.env
+:w
