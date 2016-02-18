@@ -11,6 +11,7 @@ type conn struct {
 	ws     *websocket.Conn
 	userID string
 	send   chan *Message
+	h      *hub
 }
 
 func (c *conn) write(wg *sync.WaitGroup) error {
@@ -35,7 +36,7 @@ func (c *conn) write(wg *sync.WaitGroup) error {
 
 func (c *conn) read(wg *sync.WaitGroup) error {
 	defer func() {
-		h.unregister <- c
+		c.h.unregister <- c
 		c.ws.Close()
 		wg.Done()
 	}()
@@ -52,10 +53,19 @@ func (c *conn) read(wg *sync.WaitGroup) error {
 
 			total := db.save(id, c.userID)
 			msg := &Message{ID: id, Total: total}
-			h.broadcast <- msg
+			c.h.broadcast <- msg
 		}
 	}
 	return nil
+}
+
+func initHub() *hub {
+	return &hub{
+		broadcast:   make(chan *Message),
+		unregister:  make(chan *conn),
+		register:    make(chan *conn),
+		connections: make(map[*conn]bool),
+	}
 }
 
 type hub struct {
@@ -67,13 +77,6 @@ type hub struct {
 	register chan *conn
 	// unregister
 	unregister chan *conn
-}
-
-var h = hub{
-	broadcast:   make(chan *Message),
-	unregister:  make(chan *conn),
-	register:    make(chan *conn),
-	connections: make(map[*conn]bool),
 }
 
 func (h *hub) run() {

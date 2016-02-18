@@ -112,6 +112,8 @@ func Run(host string) {
 
 	e.Use(authenticator())
 
+	h := initHub()
+
 	twitterKey := os.Getenv("TWITTER_KEY")
 	twitterSecret := os.Getenv("TWITTER_SECRET")
 
@@ -179,7 +181,10 @@ func Run(host string) {
 	e.WebSocket("/ws/", func(c *echo.Context) error {
 		ws := c.Socket()
 		// tbd: pass the user ID to the connection
-		cn := &conn{send: make(chan *Message), ws: ws, userID: getUserID(c)}
+		cn := &conn{
+			send: make(chan *Message),
+			ws:   ws, userID: getUserID(c),
+			h: h}
 		h.register <- cn
 
 		var wg sync.WaitGroup
@@ -229,6 +234,7 @@ func Run(host string) {
 	})
 
 	// kickoff the connection hub
+
 	go h.run()
 
 	e.Run(host)
