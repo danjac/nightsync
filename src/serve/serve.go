@@ -33,6 +33,8 @@ const (
 	pubKeyPath  = "keys/app.rsa.pub" // openssl rsa -in app.rsa -pubout > app.rsa.pub
 )
 
+const clientURL = "http://localhost:8080"
+
 // read the key files before starting http handlers
 func init() {
 	signBytes, err := ioutil.ReadFile(privKeyPath)
@@ -56,22 +58,7 @@ func fatal(err error) {
 
 var db = initDB()
 
-// Message is message broadcast to all connections
-type Message struct {
-	Total int    `json:"total"`
-	ID    string `json:"id"` // yelp ID
-}
-
-// Bar is just a bar, man
-type Bar struct {
-	ID        string `json:"id"`
-	Thumbnail string `json:"thumbnail"`
-	Name      string `json:"name"`
-	Review    string `json:"review"`
-	Total     int    `json:"total"`
-	Going     bool   `json:"going"`
-}
-
+// grabs user ID from context
 func getUserID(c *echo.Context) string {
 	if userID := c.Get("userid"); userID != nil {
 		return userID.(string)
@@ -79,6 +66,7 @@ func getUserID(c *echo.Context) string {
 	return ""
 }
 
+// authentication middleware: decodes JWT token
 func authenticator() echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		// token will either be in header or query string (e.g. sockets)
@@ -117,23 +105,13 @@ func authenticator() echo.HandlerFunc {
 // Run runs the application.
 func Run(host string) {
 
-	// tbd: we need to be able to store the current user
-	// and location in the session. The web client should
-	// then "phone home" to get this info.
-
 	e := echo.New()
 	e.SetDebug(true)
 	e.Use(mw.Logger())
 	e.Use(mw.Recover())
 
-	store := session.NewCookieStore([]byte(os.Getenv("SECRET_KEY")))
-	e.Use(session.Sessions("nightsync", store))
-
-	// authentication middleware
 	e.Use(authenticator())
 
-	// we want to use JWT for authentication
-	// should be middleware/func for it
 	twitterKey := os.Getenv("TWITTER_KEY")
 	twitterSecret := os.Getenv("TWITTER_SECRET")
 
@@ -142,7 +120,7 @@ func Run(host string) {
 			"http://localhost:4000/auth/callback/?provider=twitter",
 		),
 	)
-	gothic.Store = store
+	gothic.Store = session.NewCookieStore([]byte(os.Getenv("SECRET_KEY")))
 
 	cors := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -245,7 +223,7 @@ func Run(host string) {
 			return err
 		}
 		// the client can now just read the token from the query string
-		url := fmt.Sprintf("http://localhost:8080?jwt-token=%s", tokenStr)
+		url := fmt.Sprintf("%s?jwt-token=%s", clientURL, tokenStr)
 		return c.Redirect(http.StatusTemporaryRedirect, url)
 
 	})
