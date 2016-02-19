@@ -1,10 +1,10 @@
-package serve
+package handlers
 
 import (
 	"fmt"
 	"sync"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
 type conn struct {
@@ -27,7 +27,7 @@ func (c *conn) write(wg *sync.WaitGroup) error {
 			if !ok {
 				return nil
 			}
-			if err := websocket.JSON.Send(c.ws, msg); err != nil {
+			if err := c.ws.WriteJSON(msg); err != nil {
 				return err
 			}
 		}
@@ -44,11 +44,15 @@ func (c *conn) read(wg *sync.WaitGroup) error {
 	//c.ws.SetReadDeadline(time.Now().Add(pongWait))
 
 	for {
-		var id string // bar ID
-		if err := websocket.Message.Receive(c.ws, &id); err != nil {
+		var (
+			p   []byte
+			err error
+		)
+		if _, p, err = c.ws.ReadMessage(); err != nil {
 			fmt.Errorf("socket error:%v", err)
 			break
 		}
+		id := string(p)
 		if c.userID != "" {
 
 			total := db.save(id, c.userID)

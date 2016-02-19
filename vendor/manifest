@@ -2,12 +2,6 @@
 	"version": 0,
 	"dependencies": [
 		{
-			"importpath": "github.com/JustinBeckwith/go-yelp",
-			"repository": "https://github.com/JustinBeckwith/go-yelp",
-			"revision": "e0e1b550d545d9be0446ce324babcb16f09270f5",
-			"branch": "master"
-		},
-		{
 			"importpath": "github.com/JustinBeckwith/go-yelp/yelp",
 			"repository": "https://github.com/JustinBeckwith/go-yelp",
 			"revision": "e0e1b550d545d9be0446ce324babcb16f09270f5",
@@ -18,12 +12,6 @@
 			"importpath": "github.com/JustinBeckwith/oauth",
 			"repository": "https://github.com/JustinBeckwith/oauth",
 			"revision": "a1577bd3870218dc30725a7cf4655e9917e3751b",
-			"branch": "master"
-		},
-		{
-			"importpath": "github.com/boj/redistore",
-			"repository": "https://github.com/boj/redistore",
-			"revision": "fc113767cd6b051980f260d6dbe84b2740c46ab0",
 			"branch": "master"
 		},
 		{
@@ -43,20 +31,6 @@
 			"repository": "https://github.com/dgrijalva/jwt-go",
 			"revision": "f2193411bd642f7db03249fd79d5292c9b34916a",
 			"branch": "master"
-		},
-		{
-			"importpath": "github.com/garyburd/redigo/internal",
-			"repository": "https://github.com/garyburd/redigo",
-			"revision": "836b6e58b3358112c8291565d01c35b8764070d7",
-			"branch": "master",
-			"path": "/internal"
-		},
-		{
-			"importpath": "github.com/garyburd/redigo/redis",
-			"repository": "https://github.com/garyburd/redigo",
-			"revision": "836b6e58b3358112c8291565d01c35b8764070d7",
-			"branch": "master",
-			"path": "/redis"
 		},
 		{
 			"importpath": "github.com/go-martini/martini",
@@ -95,6 +69,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/gorilla/websocket",
+			"repository": "https://github.com/gorilla/websocket",
+			"revision": "4935ba31a2adbfcd9e08b86d2657659afbf1af9a",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/guregu/null",
 			"repository": "https://github.com/guregu/null",
 			"revision": "79c5bd36b615db4c06132321189f579c8a5fca98",
@@ -107,61 +87,15 @@
 			"branch": "master"
 		},
 		{
-			"importpath": "github.com/labstack/echo",
-			"repository": "https://github.com/labstack/echo",
-			"revision": "849000076287d6fdda4096792d188e704d22526e",
-			"branch": "master"
-		},
-		{
-			"importpath": "github.com/labstack/gommon/color",
-			"repository": "https://github.com/labstack/gommon",
-			"revision": "bfff5bf04688a4048a5cb4dd3b3f0697caaad19c",
-			"branch": "master",
-			"path": "/color"
-		},
-		{
-			"importpath": "github.com/labstack/gommon/log",
-			"repository": "https://github.com/labstack/gommon",
-			"revision": "bfff5bf04688a4048a5cb4dd3b3f0697caaad19c",
-			"branch": "master",
-			"path": "/log"
-		},
-		{
 			"importpath": "github.com/markbates/goth",
 			"repository": "https://github.com/markbates/goth",
 			"revision": "4d62ea85078e93d2ec1556c8dbc3126e37250e49",
 			"branch": "master"
 		},
 		{
-			"importpath": "github.com/markbates/goth/gothic",
-			"repository": "https://github.com/markbates/goth",
-			"revision": "4d62ea85078e93d2ec1556c8dbc3126e37250e49",
-			"branch": "master",
-			"path": "/gothic"
-		},
-		{
-			"importpath": "github.com/markbates/goth/providers/twitter",
-			"repository": "https://github.com/markbates/goth",
-			"revision": "4d62ea85078e93d2ec1556c8dbc3126e37250e49",
-			"branch": "master",
-			"path": "/providers/twitter"
-		},
-		{
 			"importpath": "github.com/martini-contrib/render",
 			"repository": "https://github.com/martini-contrib/render",
 			"revision": "ec18f8345a1181146728238980606fb1d6f40e8c",
-			"branch": "master"
-		},
-		{
-			"importpath": "github.com/mattn/go-colorable",
-			"repository": "https://github.com/mattn/go-colorable",
-			"revision": "9fdad7c47650b7d2e1da50644c1f4ba7f172f252",
-			"branch": "master"
-		},
-		{
-			"importpath": "github.com/mattn/go-isatty",
-			"repository": "https://github.com/mattn/go-isatty",
-			"revision": "56b76bdf51f7708750eac80fa38b952bb9f32639",
 			"branch": "master"
 		},
 		{
@@ -189,13 +123,6 @@
 			"branch": "master"
 		},
 		{
-			"importpath": "github.com/syntaqx/echo-middleware/session",
-			"repository": "https://github.com/syntaqx/echo-middleware",
-			"revision": "3ddfe56a784e00fde6ca465115267366cde4a85b",
-			"branch": "master",
-			"path": "/session"
-		},
-		{
 			"importpath": "github.com/zenazn/goji",
 			"repository": "https://github.com/zenazn/goji",
 			"revision": "859bfa93a8db583de1dd72a1edcbf4bb75c0dbbe",
@@ -207,20 +134,6 @@
 			"revision": "b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed",
 			"branch": "master",
 			"path": "/context"
-		},
-		{
-			"importpath": "golang.org/x/net/http2",
-			"repository": "https://go.googlesource.com/net",
-			"revision": "b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed",
-			"branch": "master",
-			"path": "/http2"
-		},
-		{
-			"importpath": "golang.org/x/net/websocket",
-			"repository": "https://go.googlesource.com/net",
-			"revision": "b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed",
-			"branch": "master",
-			"path": "/websocket"
 		},
 		{
 			"importpath": "golang.org/x/oauth2",

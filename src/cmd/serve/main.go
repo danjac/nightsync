@@ -1,9 +1,9 @@
 package main
 
-import "serve"
+import "handlers"
 
 func main() {
 
-	serve.Run(":4000")
+	handlers.Run(":4000")
 
 }

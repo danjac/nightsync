@@ -1,4 +1,4 @@
-package serve
+package handlers
 
 // Message is message broadcast to all connections
 type Message struct {

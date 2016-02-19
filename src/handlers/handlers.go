@@ -1,7 +1,8 @@
-package serve
+package handlers
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,12 +16,15 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/cors"
 
-	"github.com/labstack/echo"
-	mw "github.com/labstack/echo/middleware"
+	"github.com/codegangsta/negroni"
+
+	"github.com/gorilla/context"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
+	"github.com/gorilla/websocket"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/markbates/goth/providers/twitter"
-	"github.com/syntaqx/echo-middleware/session"
 )
 
 var (
@@ -34,6 +38,14 @@ const (
 )
 
 const clientURL = "http://localhost:8080"
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
 // read the key files before starting http handlers
 func init() {
@@ -56,63 +68,63 @@ func fatal(err error) {
 	}
 }
 
-var db = initDB()
+func handleServerError(w http.ResponseWriter, err error) {
+	log.Println(err)
+	http.Error(w, "Sorry, an error has occurred", http.StatusInternalServerError)
+}
+
+var (
+	db = initDB()
+	h  = initHub()
+)
 
 // grabs user ID from context
-func getUserID(c *echo.Context) string {
-	if userID := c.Get("userid"); userID != nil {
+func getUserID(r *http.Request) string {
+	if userID := context.Get(r, "userid"); userID != nil {
 		return userID.(string)
 	}
 	return ""
 }
 
 // authentication middleware: decodes JWT token
-func authenticator() echo.HandlerFunc {
-	return func(c *echo.Context) error {
-		// token will either be in header or query string (e.g. sockets)
-		auth := ""
-		header := c.Request().Header.Get("Authorization")
-		if header == "" {
-			// try the query string
-			auth = c.Query("jwt-token")
-		} else {
-			parts := strings.Split(header, "Bearer")
-			if len(parts) < 2 {
-				return nil
-			}
-			auth = strings.Trim(parts[1], " ")
+func authenticator(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	// token will either be in header or query string (e.g. sockets)
+	auth := ""
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		// try the query string
+		auth = r.URL.Query().Get("jwt-token")
+	} else {
+		parts := strings.Split(header, "Bearer")
+		if len(parts) < 2 {
+			next(w, r)
+			return
 		}
-		if auth == "" {
-			return nil
-		}
-		t, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
-			return verifyKey, nil
-		})
-		if err != nil {
-			//check if timeout etc
-			log.Println("JWTERROR", err)
-			return nil
-		}
-		if t.Valid {
-			c.Set("userid", t.Claims["userid"])
-		} else {
-			fmt.Println("NOTVALID")
-		}
-		return nil
+		auth = strings.Trim(parts[1], " ")
 	}
+	if auth == "" {
+		next(w, r)
+		return
+	}
+	t, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
+		return verifyKey, nil
+	})
+	if err != nil {
+		//check if timeout etc
+		log.Println("JWTERROR", err)
+		next(w, r)
+		return
+	}
+	if t.Valid {
+		context.Set(r, "userid", t.Claims["userid"])
+	} else {
+		fmt.Println("NOTVALID")
+	}
+	next(w, r)
 }
 
 // Run runs the application.
 func Run(host string) {
-
-	e := echo.New()
-	e.SetDebug(true)
-	e.Use(mw.Logger())
-	e.Use(mw.Recover())
-
-	e.Use(authenticator())
-
-	h := initHub()
 
 	twitterKey := os.Getenv("TWITTER_KEY")
 	twitterSecret := os.Getenv("TWITTER_SECRET")
@@ -122,7 +134,7 @@ func Run(host string) {
 			"http://localhost:4000/auth/callback/?provider=twitter",
 		),
 	)
-	gothic.Store = session.NewCookieStore([]byte(os.Getenv("SECRET_KEY")))
+	gothic.Store = sessions.NewCookieStore([]byte(os.Getenv("SECRET_KEY")))
 
 	cors := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -130,7 +142,6 @@ func Run(host string) {
 		AllowCredentials: true,
 		Debug:            false,
 	})
-	e.Use(cors.Handler)
 
 	authOptions := &yelp.AuthOptions{
 		ConsumerKey:       os.Getenv("YELP_CONSUMER_KEY"),
@@ -139,11 +150,14 @@ func Run(host string) {
 		AccessTokenSecret: os.Getenv("YELP_ACCESS_TOKEN_SECRET"),
 	}
 
-	e.Get("/search/", func(c *echo.Context) error {
+	router := mux.NewRouter()
 
-		location := c.Query("location")
+	router.HandleFunc("/search/", func(w http.ResponseWriter, r *http.Request) {
+
+		location := r.URL.Query().Get("location")
 		if location == "" {
-			return echo.NewHTTPError(http.StatusBadRequest)
+			http.Error(w, "Location required", http.StatusBadRequest)
+			return
 		}
 
 		searchOptions := yelp.SearchOptions{
@@ -158,11 +172,12 @@ func Run(host string) {
 		client := yelp.New(authOptions, nil)
 		result, err := client.DoSearch(searchOptions)
 		if err != nil {
-			return err
+			handleServerError(w, err)
+			return
 		}
 
 		bars := make([]Bar, len(result.Businesses))
-		userID := getUserID(c)
+		userID := getUserID(r)
 
 		for i, biz := range result.Businesses {
 			bars[i] = Bar{
@@ -174,17 +189,23 @@ func Run(host string) {
 				db.isGoing(biz.ID, userID),
 			}
 		}
-		return c.JSON(http.StatusOK, bars)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(bars); err != nil {
+			handleServerError(w, err)
+		}
 	})
 
-	// tbd: fix the CPU usage
-	e.WebSocket("/ws/", func(c *echo.Context) error {
-		ws := c.Socket()
-		// tbd: pass the user ID to the connection
+	router.HandleFunc("/ws/", func(w http.ResponseWriter, r *http.Request) {
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			handleServerError(w, err)
+			return
+		}
 		cn := &conn{
-			send: make(chan *Message),
-			ws:   ws, userID: getUserID(c),
-			h: h}
+			send:   make(chan *Message),
+			ws:     ws,
+			userID: getUserID(r),
+			h:      h}
 		h.register <- cn
 
 		var wg sync.WaitGroup
@@ -192,30 +213,20 @@ func Run(host string) {
 		go cn.write(&wg)
 		go cn.read(&wg)
 		wg.Wait()
-		return nil
 	})
 
-	auth := e.Group("/auth/")
-
-	auth.Get("user/", func(c *echo.Context) error {
-		return c.String(http.StatusOK, getUserID(c))
-	})
+	auth := router.PathPrefix("/auth").Subrouter()
 
 	// redirects to provider
-	auth.Get("redirect/", func(c *echo.Context) error {
-		url, err := gothic.GetAuthURL(c.Response(), c.Request())
-		if err != nil {
-			return err
-		}
-		return c.Redirect(http.StatusTemporaryRedirect, url)
-	})
+	auth.HandleFunc("/redirect/", gothic.BeginAuthHandler)
 
 	// oauth provider callback
-	auth.Get("callback/", func(c *echo.Context) error {
+	auth.HandleFunc("/callback/", func(w http.ResponseWriter, r *http.Request) {
 
-		creds, err := gothic.CompleteUserAuth(c.Response(), c.Request())
+		creds, err := gothic.CompleteUserAuth(w, r)
 		if err != nil {
-			return err
+			handleServerError(w, err)
+			return
 		}
 		expires := time.Now().Add(time.Hour * 24)
 		userID := fmt.Sprintf("%s:%s", creds.Provider, creds.UserID)
@@ -225,18 +236,22 @@ func Run(host string) {
 		token.Claims["exp"] = expires.Unix()
 		tokenStr, err := token.SignedString(signKey)
 		if err != nil {
-			return err
+			handleServerError(w, err)
+			return
 		}
 		// the client can now just read the token from the query string
 		url := fmt.Sprintf("%s?jwt-token=%s", clientURL, tokenStr)
-		return c.Redirect(http.StatusTemporaryRedirect, url)
-
+		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	})
 
 	// kickoff the connection hub
 
 	go h.run()
 
-	e.Run(host)
+	n := negroni.Classic()
+	n.Use(cors)
+	n.Use(negroni.HandlerFunc(authenticator))
+	n.UseHandler(router)
+	n.Run(host)
 
 }
