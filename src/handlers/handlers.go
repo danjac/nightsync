@@ -16,8 +16,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/cors"
 
-	"github.com/carbocation/interpose"
-	"github.com/carbocation/interpose/middleware"
+	"github.com/justinas/alice"
 
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
@@ -274,13 +273,9 @@ func Run(host string) {
 
 	go h.run()
 
-	i := interpose.New()
-	i.Use(cors.Handler)
-	i.Use(authenticator())
-	i.Use(middleware.GorillaLog())
-	i.UseHandler(router)
+	chain := alice.New(cors.Handler, authenticator()).Then(router)
 
-	if err := http.ListenAndServe(host, i); err != nil {
+	if err := http.ListenAndServe(host, chain); err != nil {
 		log.Fatal(err)
 	}
 
