@@ -16,7 +16,8 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/cors"
 
-	"github.com/codegangsta/negroni"
+	"github.com/carbocation/interpose"
+	"github.com/carbocation/interpose/middleware"
 
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
@@ -33,11 +34,11 @@ var (
 )
 
 const (
-	privKeyPath = "keys/app.rsa"     // openssl genrsa -out app.rsa keysize
-	pubKeyPath  = "keys/app.rsa.pub" // openssl rsa -in app.rsa -pubout > app.rsa.pub
+	privKeyPath    = "keys/app.rsa"     // openssl genrsa -out app.rsa keysize
+	pubKeyPath     = "keys/app.rsa.pub" // openssl rsa -in app.rsa -pubout > app.rsa.pub
+	clientURL      = "http://localhost:8080"
+	userContextKey = "userid"
 )
-
-const clientURL = "http://localhost:8080"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -68,9 +69,26 @@ func fatal(err error) {
 	}
 }
 
-func handleServerError(w http.ResponseWriter, err error) {
+type httpError struct {
+	status int
+}
+
+func (e httpError) Error() string {
+	return http.StatusText(e.status)
+}
+
+func abortWithStatus(w http.ResponseWriter, status int) {
+	abortWithError(w, httpError{status})
+}
+
+func abortWithError(w http.ResponseWriter, err error) {
+	if httpError, ok := err.(httpError); ok {
+		http.Error(w, httpError.Error(), httpError.status)
+		return
+	}
+	// maybe catch other errors such as "no rows found"
 	log.Println(err)
-	http.Error(w, "Sorry, an error has occurred", http.StatusInternalServerError)
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 var (
@@ -80,15 +98,13 @@ var (
 
 // grabs user ID from context
 func getUserID(r *http.Request) string {
-	if userID := context.Get(r, "userid"); userID != nil {
+	if userID := context.Get(r, userContextKey); userID != nil {
 		return userID.(string)
 	}
 	return ""
 }
 
-// authentication middleware: decodes JWT token
-func authenticator(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	// token will either be in header or query string (e.g. sockets)
+func authenticate(w http.ResponseWriter, r *http.Request) error {
 	auth := ""
 	header := r.Header.Get("Authorization")
 	if header == "" {
@@ -97,14 +113,12 @@ func authenticator(w http.ResponseWriter, r *http.Request, next http.HandlerFunc
 	} else {
 		parts := strings.Split(header, "Bearer")
 		if len(parts) < 2 {
-			next(w, r)
-			return
+			return nil
 		}
 		auth = strings.Trim(parts[1], " ")
 	}
 	if auth == "" {
-		next(w, r)
-		return
+		return nil
 	}
 	t, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
 		return verifyKey, nil
@@ -112,15 +126,29 @@ func authenticator(w http.ResponseWriter, r *http.Request, next http.HandlerFunc
 	if err != nil {
 		//check if timeout etc
 		log.Println("JWTERROR", err)
-		next(w, r)
-		return
+		// if a timeout throw a 401, so we can prompt re-login
+		return httpError{http.StatusUnauthorized}
 	}
 	if t.Valid {
-		context.Set(r, "userid", t.Claims["userid"])
+		context.Set(r, userContextKey, t.Claims["userid"])
 	} else {
 		fmt.Println("NOTVALID")
 	}
-	next(w, r)
+	return nil
+}
+
+// authentication middleware: decodes JWT token
+func authenticator() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		// token will either be in header or query string (e.g. sockets)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := authenticate(w, r); err != nil {
+				abortWithError(w, err)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // Run runs the application.
@@ -156,7 +184,7 @@ func Run(host string) {
 
 		location := r.URL.Query().Get("location")
 		if location == "" {
-			http.Error(w, "Location required", http.StatusBadRequest)
+			abortWithStatus(w, http.StatusBadRequest)
 			return
 		}
 
@@ -172,7 +200,7 @@ func Run(host string) {
 		client := yelp.New(authOptions, nil)
 		result, err := client.DoSearch(searchOptions)
 		if err != nil {
-			handleServerError(w, err)
+			abortWithError(w, err)
 			return
 		}
 
@@ -190,15 +218,13 @@ func Run(host string) {
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(bars); err != nil {
-			handleServerError(w, err)
-		}
+		json.NewEncoder(w).Encode(bars)
 	})
 
 	router.HandleFunc("/ws/", func(w http.ResponseWriter, r *http.Request) {
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			handleServerError(w, err)
+			abortWithError(w, err)
 			return
 		}
 		cn := &conn{
@@ -225,7 +251,7 @@ func Run(host string) {
 
 		creds, err := gothic.CompleteUserAuth(w, r)
 		if err != nil {
-			handleServerError(w, err)
+			abortWithError(w, err)
 			return
 		}
 		expires := time.Now().Add(time.Hour * 24)
@@ -236,7 +262,7 @@ func Run(host string) {
 		token.Claims["exp"] = expires.Unix()
 		tokenStr, err := token.SignedString(signKey)
 		if err != nil {
-			handleServerError(w, err)
+			abortWithError(w, err)
 			return
 		}
 		// the client can now just read the token from the query string
@@ -248,10 +274,14 @@ func Run(host string) {
 
 	go h.run()
 
-	n := negroni.Classic()
-	n.Use(cors)
-	n.Use(negroni.HandlerFunc(authenticator))
-	n.UseHandler(router)
-	n.Run(host)
+	i := interpose.New()
+	i.Use(cors.Handler)
+	i.Use(authenticator())
+	i.Use(middleware.GorillaLog())
+	i.UseHandler(router)
+
+	if err := http.ListenAndServe(host, i); err != nil {
+		log.Fatal(err)
+	}
 
 }

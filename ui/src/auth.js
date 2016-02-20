@@ -1,4 +1,5 @@
 export function getToken () {
+  // not secure, cookie would be better
   let jwtToken = window.localStorage.getItem('jwt-token')
   if (!jwtToken) {
     const qs = {}

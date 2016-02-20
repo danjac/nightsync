@@ -15,15 +15,34 @@
 			"branch": "master"
 		},
 		{
-			"importpath": "github.com/codegangsta/inject",
-			"repository": "https://github.com/codegangsta/inject",
-			"revision": "33e0aa1cb7c019ccc3fbe049a8262a6403d30504",
+			"importpath": "github.com/Sirupsen/logrus",
+			"repository": "https://github.com/Sirupsen/logrus",
+			"revision": "57cce1ed6103dce7791881d3e69e55f90d986aa5",
 			"branch": "master"
 		},
 		{
-			"importpath": "github.com/codegangsta/negroni",
-			"repository": "https://github.com/codegangsta/negroni",
-			"revision": "c7477ad8e330bef55bf1ebe300cf8aa67c492d1b",
+			"importpath": "github.com/carbocation/handlers",
+			"repository": "https://github.com/carbocation/handlers",
+			"revision": "c939c6d9ef31c3d483da9db462b6fd806044ac87",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/carbocation/interpose",
+			"repository": "https://github.com/carbocation/interpose",
+			"revision": "50c09d12f8624ab10532f931cb630d0bf5f7c2c7",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/carbocation/interpose/middleware",
+			"repository": "https://github.com/carbocation/interpose",
+			"revision": "50c09d12f8624ab10532f931cb630d0bf5f7c2c7",
+			"branch": "master",
+			"path": "/middleware"
+		},
+		{
+			"importpath": "github.com/codegangsta/inject",
+			"repository": "https://github.com/codegangsta/inject",
+			"revision": "33e0aa1cb7c019ccc3fbe049a8262a6403d30504",
 			"branch": "master"
 		},
 		{
@@ -36,6 +55,12 @@
 			"importpath": "github.com/go-martini/martini",
 			"repository": "https://github.com/go-martini/martini",
 			"revision": "dafdd96c12087352f3cf407b8f2a058028edf715",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/goods/httpbuf",
+			"repository": "https://github.com/goods/httpbuf",
+			"revision": "5709e9bb814c932e48b6737e1cf214a6522453a2",
 			"branch": "master"
 		},
 		{
@@ -87,15 +112,33 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/justinas/nosurf",
+			"repository": "https://github.com/justinas/nosurf",
+			"revision": "15aad14338c4d52da7213594578e93684fe5518c",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/markbates/goth",
 			"repository": "https://github.com/markbates/goth",
 			"revision": "4d62ea85078e93d2ec1556c8dbc3126e37250e49",
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/martini-contrib/auth",
+			"repository": "https://github.com/martini-contrib/auth",
+			"revision": "fa62c19b7ae87da370242054c8beb11af31d327f",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/martini-contrib/render",
 			"repository": "https://github.com/martini-contrib/render",
 			"revision": "ec18f8345a1181146728238980606fb1d6f40e8c",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/meatballhat/negroni-logrus",
+			"repository": "https://github.com/meatballhat/negroni-logrus",
+			"revision": "0456e765fdc169ebcb064ac33ed462b632bfc41f",
 			"branch": "master"
 		},
 		{
@@ -111,6 +154,13 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/phyber/negroni-gzip/gzip",
+			"repository": "https://github.com/phyber/negroni-gzip",
+			"revision": "1211b7a0892223f5b3f1af8629ea6c3d9f984028",
+			"branch": "master",
+			"path": "/gzip"
+		},
+		{
 			"importpath": "github.com/rs/cors",
 			"repository": "https://github.com/rs/cors",
 			"revision": "5950cf11d77f8a61b432a25dd4d444b4ced01379",
@@ -121,6 +171,18 @@
 			"repository": "https://github.com/rs/xhandler",
 			"revision": "d9d9599b6aaf6a058cb7b1f48291ded2cbd13390",
 			"branch": "master"
+		},
+		{
+			"importpath": "github.com/stretchr/graceful",
+			"repository": "https://github.com/stretchr/graceful",
+			"revision": "7116c7a8115899e80197cd9e0b97998c0f97ed8e",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/unrolled/secure",
+			"repository": "https://github.com/unrolled/secure",
+			"revision": "b0ad0b4c0762344ef305284e51dca6198c9464f0",
+			"branch": "v1"
 		},
 		{
 			"importpath": "github.com/zenazn/goji",
@@ -134,6 +196,13 @@
 			"revision": "b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed",
 			"branch": "master",
 			"path": "/context"
+		},
+		{
+			"importpath": "golang.org/x/net/netutil",
+			"repository": "https://go.googlesource.com/net",
+			"revision": "b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed",
+			"branch": "master",
+			"path": "/netutil"
 		},
 		{
 			"importpath": "golang.org/x/oauth2",

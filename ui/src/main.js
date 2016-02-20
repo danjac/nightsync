@@ -4,7 +4,17 @@ import App from './App'
 
 import { getToken } from './auth'
 
+const unauthorized = {
+  response (res) {
+    if (res && res.status === 401) {
+      window.localStorage.removeItem('jwt-token')
+    }
+    return res
+  }
+}
+
 Vue.use(Resource)
+Vue.http.interceptors.push(unauthorized)
 
 const jwtToken = getToken()
 
