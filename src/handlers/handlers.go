@@ -16,8 +16,6 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/cors"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/bakins/logrus-middleware"
 	"github.com/justinas/alice"
 
 	"github.com/gorilla/context"
@@ -153,14 +151,6 @@ func authenticator(next http.Handler) http.Handler {
 // Run runs the application.
 func Run(host string) {
 
-	logger := logrus.New()
-	logger.Level = logrus.InfoLevel
-
-	loggerMiddleware := logrusmiddleware.Middleware{
-		Name:   "example",
-		Logger: logger,
-	}
-
 	twitterKey := os.Getenv("TWITTER_KEY")
 	twitterSecret := os.Getenv("TWITTER_SECRET")
 
@@ -281,7 +271,7 @@ func Run(host string) {
 
 	go h.run()
 
-	chain := alice.New(cors.Handler, authenticator).Then(loggerMiddleware.Handler(router, "nightsync"))
+	chain := alice.New(cors.Handler, authenticator).Then(router)
 
 	if err := http.ListenAndServe(host, chain); err != nil {
 		log.Fatal(err)
