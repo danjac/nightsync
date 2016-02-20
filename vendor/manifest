@@ -21,6 +21,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/bakins/logrus-middleware",
+			"repository": "https://github.com/bakins/logrus-middleware",
+			"revision": "2f037bcda984f172af9c62c9048a5e6c12fa3179",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/carbocation/handlers",
 			"repository": "https://github.com/carbocation/handlers",
 			"revision": "c939c6d9ef31c3d483da9db462b6fd806044ac87",

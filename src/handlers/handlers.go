@@ -16,6 +16,8 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/cors"
 
+	"github.com/Sirupsen/logrus"
+	"github.com/bakins/logrus-middleware"
 	"github.com/justinas/alice"
 
 	"github.com/gorilla/context"
@@ -137,21 +139,27 @@ func authenticate(w http.ResponseWriter, r *http.Request) error {
 }
 
 // authentication middleware: decodes JWT token
-func authenticator() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		// token will either be in header or query string (e.g. sockets)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if err := authenticate(w, r); err != nil {
-				abortWithError(w, err)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
+func authenticator(next http.Handler) http.Handler {
+	// token will either be in header or query string (e.g. sockets)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := authenticate(w, r); err != nil {
+			abortWithError(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Run runs the application.
 func Run(host string) {
+
+	logger := logrus.New()
+	logger.Level = logrus.InfoLevel
+
+	loggerMiddleware := logrusmiddleware.Middleware{
+		Name:   "example",
+		Logger: logger,
+	}
 
 	twitterKey := os.Getenv("TWITTER_KEY")
 	twitterSecret := os.Getenv("TWITTER_SECRET")
@@ -273,7 +281,7 @@ func Run(host string) {
 
 	go h.run()
 
-	chain := alice.New(cors.Handler, authenticator()).Then(router)
+	chain := alice.New(cors.Handler, authenticator).Then(loggerMiddleware.Handler(router, "nightsync"))
 
 	if err := http.ListenAndServe(host, chain); err != nil {
 		log.Fatal(err)
