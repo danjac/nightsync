@@ -197,6 +197,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "goji.io",
+			"repository": "https://github.com/goji/goji",
+			"revision": "e1741450ad80d2837134e32ac7b1d0a7a2b11c51",
+			"branch": "master"
+		},
+		{
 			"importpath": "golang.org/x/net/context",
 			"repository": "https://go.googlesource.com/net",
 			"revision": "b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed",

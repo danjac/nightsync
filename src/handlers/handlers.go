@@ -16,10 +16,10 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/cors"
 
-	"github.com/justinas/alice"
+	"goji.io"
+	"goji.io/pat"
+	"golang.org/x/net/context"
 
-	"github.com/gorilla/context"
-	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/gorilla/websocket"
 	"github.com/markbates/goth"
@@ -91,104 +91,72 @@ func fatal(err error) {
 	}
 }
 
-type httpError struct {
-	status int
-}
-
-func (e httpError) Error() string {
-	return http.StatusText(e.status)
-}
-
-func newHTTPError(status int) error {
-	return httpError{status}
-}
-
 func renderJSON(w http.ResponseWriter, status int, payload interface{}) error {
 	w.WriteHeader(status)
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(payload)
 }
 
-func handleError(w http.ResponseWriter, err error) {
-	if httpError, ok := err.(httpError); ok {
-		http.Error(w, httpError.Error(), httpError.status)
-		return
-	}
-	// maybe catch other errors such as "no rows found"
-	log.Println(err)
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
 // grabs user ID from context
-func getUserID(r *http.Request) string {
-	if userID := context.Get(r, userContextKey); userID != nil {
-		return userID.(string)
+func getUserID(ctx context.Context) string {
+	if userID, ok := ctx.Value(userContextKey).(string); ok {
+		return userID
 	}
 	return ""
 }
 
-func authenticate(w http.ResponseWriter, r *http.Request) error {
-	auth := ""
-	header := r.Header.Get("Authorization")
-	if header == "" {
-		// try the query string
-		auth = r.URL.Query().Get("jwt-token")
-	} else {
-		parts := strings.Split(header, "Bearer")
-		if len(parts) < 2 {
-			return nil
+func authenticate(h goji.Handler) goji.Handler {
+
+	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+
+		// parse the header, fall back to "jwt-token" query parameter
+		auth := ""
+		header := r.Header.Get("Authorization")
+		if header == "" {
+			// try the query string
+			auth = r.URL.Query().Get("jwt-token")
+		} else {
+			parts := strings.Split(header, "Bearer")
+			if len(parts) > 1 {
+				auth = strings.Trim(parts[1], " ")
+			}
 		}
-		auth = strings.Trim(parts[1], " ")
-	}
-	if auth == "" {
-		return nil
-	}
-	t, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
-		return verifyKey, nil
+		if auth == "" {
+			h.ServeHTTPC(ctx, w, r)
+			return
+		}
+
+		// we have a valid auth header/query parameter
+
+		t, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
+			return verifyKey, nil
+		})
+
+		if err != nil {
+			// if a timeout throw a 401, so we can prompt re-login
+			http.Error(w, "session timeout", http.StatusUnauthorized)
+			return
+		}
+		if t.Valid {
+			ctx = context.WithValue(ctx, userContextKey, t.Claims["userid"])
+		}
+
+		h.ServeHTTPC(ctx, w, r)
+
 	})
-	if err != nil {
-		//check if timeout etc
-		log.Println("JWTERROR", err)
-		// if a timeout throw a 401, so we can prompt re-login
-		return newHTTPError(http.StatusUnauthorized)
-	}
-	if t.Valid {
-		context.Set(r, userContextKey, t.Claims["userid"])
-	} else {
-		fmt.Println("NOTVALID")
-	}
-	return nil
+
 }
 
-type handlerFunc func(http.ResponseWriter, *http.Request) error
-
-type handler struct {
-	H handlerFunc
-}
-
-func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := authenticate(w, r); err != nil {
-		handleError(w, err)
-		return
-	}
-	if err := h.H(w, r); err != nil {
-		handleError(w, err)
-	}
-}
-
-func newHandler(h handlerFunc) http.Handler {
-	return handler{h}
-}
-
-func socket(w http.ResponseWriter, r *http.Request) error {
+func socket(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		return err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	cn := &conn{
 		send:   make(chan *Message),
 		ws:     ws,
-		userID: getUserID(r),
+		userID: getUserID(ctx),
 		h:      h}
 	h.register <- cn
 
@@ -197,14 +165,13 @@ func socket(w http.ResponseWriter, r *http.Request) error {
 	go cn.write(&wg)
 	go cn.read(&wg)
 	wg.Wait()
-	return nil
-
 }
 
-func authCallback(w http.ResponseWriter, r *http.Request) error {
+func oauthCallback(w http.ResponseWriter, r *http.Request) {
 	creds, err := gothic.CompleteUserAuth(w, r)
 	if err != nil {
-		return err
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
 	}
 	expires := time.Now().Add(time.Hour * 24)
 	userID := fmt.Sprintf("%s:%s", creds.Provider, creds.UserID)
@@ -214,18 +181,20 @@ func authCallback(w http.ResponseWriter, r *http.Request) error {
 	token.Claims["exp"] = expires.Unix()
 	tokenStr, err := token.SignedString(signKey)
 	if err != nil {
-		return err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	// the client can now just read the token from the query string
 	url := fmt.Sprintf("%s?jwt-token=%s", clientURL, tokenStr)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-	return nil
 }
 
-func searchLocation(w http.ResponseWriter, r *http.Request) error {
+func searchLocation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+
 	location := r.URL.Query().Get("location")
 	if location == "" {
-		return newHTTPError(http.StatusBadRequest)
+		http.Error(w, "location required", http.StatusBadRequest)
+		return
 	}
 
 	searchOptions := yelp.SearchOptions{
@@ -240,11 +209,12 @@ func searchLocation(w http.ResponseWriter, r *http.Request) error {
 	client := yelp.New(authOptions, nil)
 	result, err := client.DoSearch(searchOptions)
 	if err != nil {
-		return err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	bars := make([]Bar, len(result.Businesses))
-	userID := getUserID(r)
+	userID := getUserID(ctx)
 
 	for i, biz := range result.Businesses {
 		bars[i] = Bar{
@@ -256,7 +226,7 @@ func searchLocation(w http.ResponseWriter, r *http.Request) error {
 			db.isGoing(biz.ID, userID),
 		}
 	}
-	return renderJSON(w, http.StatusOK, bars)
+	renderJSON(w, http.StatusOK, bars)
 }
 
 // Run runs the application.
@@ -269,26 +239,30 @@ func Run(host string) {
 		Debug:            false,
 	})
 
-	router := mux.NewRouter()
+	router := goji.NewMux()
 
-	router.Handle("/search/", newHandler(searchLocation)).Methods("GET")
-	router.Handle("/ws/", newHandler(socket)).Methods("GET")
+	// middlewares
+	router.Use(cors.Handler)
+	router.UseC(authenticate)
 
-	auth := router.PathPrefix("/auth").Subrouter()
+	router.HandleFuncC(pat.Get("/search/"), searchLocation)
+	router.HandleFuncC(pat.Get("/ws/"), socket)
+
+	auth := goji.SubMux()
 
 	// oauth provider callback
-	auth.Handle("/callback/", newHandler(authCallback))
+	auth.HandleFunc(pat.Get("/callback/"), oauthCallback)
 
 	// redirects to provider
-	auth.HandleFunc("/redirect/", gothic.BeginAuthHandler)
+	auth.HandleFunc(pat.Get("/redirect/"), gothic.BeginAuthHandler)
+
+	router.HandleC(pat.New("/auth/*"), auth)
 
 	// kickoff the connection hub
 
 	go h.run()
 
-	chain := alice.New(cors.Handler).Then(router)
-
-	if err := http.ListenAndServe(host, chain); err != nil {
+	if err := http.ListenAndServe(host, router); err != nil {
 		log.Fatal(err)
 	}
 
